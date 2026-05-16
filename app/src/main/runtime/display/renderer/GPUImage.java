@@ -1,6 +1,7 @@
 package com.winlator.cmod.runtime.display.renderer;
 
 import androidx.annotation.Keep;
+import android.opengl.GLES20;
 import com.winlator.cmod.runtime.display.xserver.Drawable;
 import java.nio.ByteBuffer;
 
@@ -19,10 +20,16 @@ public class GPUImage extends Texture {
   }
 
   public GPUImage(short width, short height) {
+    this(width, height, true);
+  }
+
+  public GPUImage(short width, short height, boolean cpuAccessible) {
     try {
-      cpuAccessible = true;
+      this.cpuAccessible = cpuAccessible;
       hardwareBufferPtr = createHardwareBuffer(width, height);
-      initializeCpuMapping();
+      if (cpuAccessible) {
+        initializeCpuMapping();
+      }
     } catch (Throwable e) {
       System.err.println("Error: Failed to create GPUImage: " + e.getMessage());
       destroy();
@@ -80,6 +87,25 @@ public class GPUImage extends Texture {
     needsUpdate = false;
   }
 
+  @Override
+  public void copyFromFramebuffer(int framebuffer, short width, short height) {
+    if (!isAllocated()) {
+      allocateTexture(width, height, null);
+    }
+    if (!isAllocated()) return;
+
+    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffer);
+    GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId);
+    GLES20.glCopyTexSubImage2D(GLES20.GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+    // Framegen consumes the backing AHardwareBuffer on another thread via
+    // native CPU/Vulkan paths immediately after capture. Make the GL copy
+    // visible before we hand the buffer off.
+    GLES20.glFinish();
+    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+  }
+
   public short getStride() {
     return stride;
   }
@@ -99,6 +125,10 @@ public class GPUImage extends Texture {
 
   public boolean hasSamplingFailed() {
     return samplingFailed;
+  }
+
+  public long getHardwareBufferPtr() {
+    return hardwareBufferPtr;
   }
 
   @Override

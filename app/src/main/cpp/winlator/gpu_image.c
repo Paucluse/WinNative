@@ -16,7 +16,6 @@
 
 #define LOG_TAG "System.out"
 #define printf(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
-#define HAL_PIXEL_FORMAT_BGRA_8888 5
 
 // Function to create an EGL image from a hardware buffer
 EGLImageKHR createImageKHR(AHardwareBuffer *hardwareBuffer, int textureId) {
@@ -76,7 +75,7 @@ AHardwareBuffer *createHardwareBuffer(int width, int height) {
   buffDesc.usage = AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE |
                    AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN |
                    AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN;
-  buffDesc.format = HAL_PIXEL_FORMAT_BGRA_8888;
+  buffDesc.format = AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
 
   AHardwareBuffer *hardwareBuffer = NULL;
   if (AHardwareBuffer_allocate(&buffDesc, &hardwareBuffer) != 0) {

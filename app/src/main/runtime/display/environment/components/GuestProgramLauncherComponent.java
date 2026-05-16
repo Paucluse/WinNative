@@ -18,6 +18,8 @@ import com.winlator.cmod.runtime.content.ContentsManager;
 import com.winlator.cmod.runtime.display.connector.UnixSocketConfig;
 import com.winlator.cmod.runtime.display.environment.EnvironmentComponent;
 import com.winlator.cmod.runtime.display.environment.ImageFs;
+import com.winlator.cmod.runtime.display.framegen.FrameGenerationConfig;
+import com.winlator.cmod.runtime.display.framegen.LsfgVkManager;
 import com.winlator.cmod.runtime.input.controls.FakeInputWriter;
 import com.winlator.cmod.runtime.system.GPUInformation;
 import com.winlator.cmod.runtime.system.ProcessHelper;
@@ -994,6 +996,10 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         envVars.get("FAKE_EVDEV_MEMFD_PATHS"),
         envVars.get("FAKE_UDEV_DATA_DIR"));
     FEXCorePresetManager.normalizeSmcChecksEnvVars(envVars, this.envVars);
+
+    FrameGenerationConfig frameGenerationConfig =
+        FrameGenerationConfig.fromPreferences(preferences);
+    LsfgVkManager.applyLaunchEnv(context, container, frameGenerationConfig, envVars);
 
     String emulator = container.getEmulator();
     String emulator64 = container.getEmulator64();

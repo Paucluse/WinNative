@@ -27,9 +27,23 @@ ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
 
+def versionProps = new Properties()
+def versionPropsFile = rootProject.file("version.properties")
+if (versionPropsFile.exists()) {
+    versionPropsFile.withInputStream { versionProps.load(it) }
+}
+
+def defaultVersionName = versionProps.getProperty("VERSION_NAME", "0.1.00")
+def defaultVersionCode = (versionProps.getProperty("VERSION_CODE", "100") as Integer)
+
 def appVersionName = providers.gradleProperty("VERSION_NAME")
         .orElse(providers.environmentVariable("VERSION_NAME"))
-        .getOrElse("Nightly")
+        .getOrElse(defaultVersionName)
+
+def appVersionCode = providers.gradleProperty("VERSION_CODE")
+        .orElse(providers.environmentVariable("VERSION_CODE"))
+        .map { it as Integer }
+        .getOrElse(defaultVersionCode)
 
 android {
     namespace 'com.winlator.cmod'
@@ -39,7 +53,7 @@ android {
         applicationId "com.winnative.cmod"
         minSdk 26
         targetSdk 28
-        versionCode 1
+        versionCode appVersionCode
         versionName appVersionName
 
         externalNativeBuild {

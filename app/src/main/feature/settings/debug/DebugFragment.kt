@@ -2,6 +2,7 @@
 package com.winlator.cmod.feature.settings
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,6 +14,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -22,6 +24,9 @@ import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
 import com.winlator.cmod.R
 import com.winlator.cmod.app.config.SettingsConfig
+import com.winlator.cmod.runtime.display.framegen.FrameGenerationConfig
+import com.winlator.cmod.runtime.display.framegen.LosslessDllManager
+import com.winlator.cmod.runtime.display.framegen.LosslessShaderExtractor
 import com.winlator.cmod.shared.ui.toast.WinToast
 import com.winlator.cmod.shared.io.AssetPaths
 import com.winlator.cmod.shared.io.FileUtils
@@ -37,6 +42,27 @@ class DebugFragment : Fragment() {
     private lateinit var preferences: SharedPreferences
     private var debugState by mutableStateOf(DebugState())
     private var wineChannelOptions: List<String> = emptyList()
+    private val losslessDllPickerLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            if (uri == null) return@registerForActivityResult
+            val ctx = context ?: return@registerForActivityResult
+            runCatching { LosslessDllManager.tryPersistReadPermission(ctx, uri) }
+            val importResult = LosslessDllManager.importFromUri(ctx, preferences, uri)
+            if (!importResult.success) {
+                WinToast.show(ctx, importResult.message)
+                refresh()
+                return@registerForActivityResult
+            }
+            preferences.edit {
+                putBoolean(LosslessShaderExtractor.PREF_SHADERS_READY, true)
+                putString(
+                    LosslessShaderExtractor.PREF_LAST_STATUS,
+                    "Lossless.dll imported. lsfg-vk will arm on the next game launch."
+                )
+            }
+            WinToast.show(ctx, importResult.message)
+            refresh()
+        }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -135,6 +161,25 @@ class DebugFragment : Fragment() {
                                 .updateLoggingState(ctx)
                             refresh()
                         },
+                        onSuperFrameEnabledChanged = { checked ->
+                            preferences.edit { putBoolean(FrameGenerationConfig.PREF_ENABLED, checked) }
+                            refresh()
+                        },
+                        onImportLosslessDll = {
+                            losslessDllPickerLauncher.launch(arrayOf("*/*"))
+                        },
+                        onRemoveLosslessDll = {
+                            LosslessDllManager.clearImportedDll(ctx, preferences)
+                            preferences.edit {
+                                putBoolean(FrameGenerationConfig.PREF_ENABLED, false)
+                                putBoolean(LosslessShaderExtractor.PREF_SHADERS_READY, false)
+                                putString(
+                                    LosslessShaderExtractor.PREF_LAST_STATUS,
+                                    "Lossless.dll has not been imported."
+                                )
+                            }
+                            refresh()
+                        },
                         onShareLogs = { shareLogs() },
                     )
                 }
@@ -165,6 +210,11 @@ class DebugFragment : Fragment() {
                 steamLogs = com.winlator.cmod.feature.stores.steam.utils.PrefManager.enableSteamLogs,
                 inputLogs = preferences.getBoolean("enable_input_logs", false),
                 downloadLogs = preferences.getBoolean("enable_download_logs", false),
+                superFrameEnabled = preferences.getBoolean(FrameGenerationConfig.PREF_ENABLED, false),
+                losslessDllImported = LosslessDllManager.hasImportedDll(requireContext()),
+                losslessDllName = LosslessDllManager.getImportedDllDisplayName(requireContext(), preferences),
+                losslessShaderReady = LosslessDllManager.hasImportedDll(requireContext()),
+                losslessStatus = LosslessShaderExtractor.getLastStatus(preferences),
             )
     }
 

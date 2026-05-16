@@ -309,6 +309,20 @@ data class XServerDrawerState(
     val gyroscopeCardExpanded: Boolean = false,
     val fpsLimit: Int = 0,
     val screenEffectsCardExpanded: Boolean = false,
+    val superFrameEnabled: Boolean = false,
+    val superFrameMultiplier: Int = 2,
+    val superFrameFlowScale: Float = 0.70f,
+    val superFramePerformanceMode: Boolean = false,
+    val superFrameAntiArtifacts: Boolean = true,
+    val superFrameFramegenFp16: Boolean = false,
+    val superFrameTargetFpsCap: Int = 0,
+    val superFrameEmaAlpha: Float = 0.125f,
+    val superFrameOutlierRatio: Float = 4.0f,
+    val superFrameVsyncSlackMs: Float = 2.0f,
+    val superFrameQueueDepth: Int = 4,
+    val superFrameDllImported: Boolean = false,
+    val superFrameShaderReady: Boolean = false,
+    val superFrameStatus: String = "",
     val fsrEnabled: Boolean = false,
     val fsrMode: Int = 0,
     val fsrSharpness: Int = 100,
@@ -479,6 +493,28 @@ interface XServerDrawerActionListener {
 
     fun onScreenEffectsCardExpandedChanged(expanded: Boolean)
 
+    fun onSuperFrameEnabledChanged(enabled: Boolean)
+
+    fun onSuperFrameMultiplierChanged(multiplier: Int)
+
+    fun onSuperFrameFlowScaleChanged(flowScale: Float)
+
+    fun onSuperFramePerformanceModeChanged(enabled: Boolean)
+
+    fun onSuperFrameAntiArtifactsChanged(enabled: Boolean)
+
+    fun onSuperFrameFramegenFp16Changed(enabled: Boolean)
+
+    fun onSuperFrameTargetFpsCapChanged(targetFpsCap: Int)
+
+    fun onSuperFrameEmaAlphaChanged(emaAlpha: Float)
+
+    fun onSuperFrameOutlierRatioChanged(outlierRatio: Float)
+
+    fun onSuperFrameVsyncSlackMsChanged(vsyncSlackMs: Float)
+
+    fun onSuperFrameQueueDepthChanged(queueDepth: Int)
+
     fun onFSREnabledChanged(enabled: Boolean)
 
     fun onFSRModeSelected(mode: Int)
@@ -552,6 +588,20 @@ fun buildXServerDrawerState(
     gyroscopeCardExpanded: Boolean = false,
     fpsLimit: Int = 0,
     screenEffectsCardExpanded: Boolean = false,
+    superFrameEnabled: Boolean = false,
+    superFrameMultiplier: Int = 2,
+    superFrameFlowScale: Float = 0.70f,
+    superFramePerformanceMode: Boolean = false,
+    superFrameAntiArtifacts: Boolean = true,
+    superFrameFramegenFp16: Boolean = false,
+    superFrameTargetFpsCap: Int = 0,
+    superFrameEmaAlpha: Float = 0.125f,
+    superFrameOutlierRatio: Float = 4.0f,
+    superFrameVsyncSlackMs: Float = 2.0f,
+    superFrameQueueDepth: Int = 4,
+    superFrameDllImported: Boolean = false,
+    superFrameShaderReady: Boolean = false,
+    superFrameStatus: String = "",
     fsrEnabled: Boolean = false,
     fsrMode: Int = 0,
     fsrSharpness: Int = 100,
@@ -623,7 +673,7 @@ fun buildXServerDrawerState(
                 title = context.getString(R.string.session_drawer_screen_effects),
                 subtitle = context.getString(R.string.session_drawer_screen_effects_subtitle),
                 icon = Icons.Outlined.Tune,
-                active = fsrEnabled || colorProfile > 0,
+                active = superFrameEnabled || fsrEnabled || colorProfile > 0,
             ),
             XServerDrawerItem(
                 itemId = R.id.main_menu_native_rendering,
@@ -707,6 +757,20 @@ fun buildXServerDrawerState(
         gyroscopeCardExpanded = gyroscopeCardExpanded,
         fpsLimit = fpsLimit,
         screenEffectsCardExpanded = screenEffectsCardExpanded,
+        superFrameEnabled = superFrameEnabled,
+        superFrameMultiplier = superFrameMultiplier,
+        superFrameFlowScale = superFrameFlowScale,
+        superFramePerformanceMode = superFramePerformanceMode,
+        superFrameAntiArtifacts = superFrameAntiArtifacts,
+        superFrameFramegenFp16 = superFrameFramegenFp16,
+        superFrameTargetFpsCap = superFrameTargetFpsCap,
+        superFrameEmaAlpha = superFrameEmaAlpha,
+        superFrameOutlierRatio = superFrameOutlierRatio,
+        superFrameVsyncSlackMs = superFrameVsyncSlackMs,
+        superFrameQueueDepth = superFrameQueueDepth,
+        superFrameDllImported = superFrameDllImported,
+        superFrameShaderReady = superFrameShaderReady,
+        superFrameStatus = superFrameStatus,
         fsrEnabled = fsrEnabled,
         fsrMode = fsrMode,
         fsrSharpness = fsrSharpness,
@@ -1946,6 +2010,14 @@ private fun ScreenEffectsPaneContent(
     state: XServerDrawerState,
     listener: XServerDrawerActionListener,
 ) {
+    fun targetFpsCapToSliderValue(targetFpsCap: Int): Float =
+        if (targetFpsCap <= 0) 0f else (((targetFpsCap.coerceIn(30, 240) - 30) / 10) + 1).toFloat()
+
+    fun sliderValueToTargetFpsCap(value: Float): Int {
+        val step = value.roundToInt()
+        return if (step <= 0) 0 else 30 + ((step - 1) * 10)
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val paneScale = computePaneScale(maxHeight)
         CompositionLocalProvider(LocalPaneScale provides paneScale) {
@@ -1957,6 +2029,137 @@ private fun ScreenEffectsPaneContent(
                         .padding(horizontal = (12f * paneScale).dp, vertical = (12f * paneScale).dp),
                 verticalArrangement = Arrangement.spacedBy((10f * paneScale).dp),
             ) {
+            DrawerBooleanRow(
+                title = stringResource(R.string.session_drawer_superframe),
+                checked = state.superFrameEnabled,
+                onCheckedChange = listener::onSuperFrameEnabledChanged,
+            )
+
+            if (state.superFrameEnabled || state.superFrameDllImported || state.superFrameShaderReady) {
+                Column(verticalArrangement = Arrangement.spacedBy((8f * paneScale).dp)) {
+                    PaneSectionLabel(stringResource(R.string.session_drawer_superframe))
+                    Text(
+                        text =
+                            buildString {
+                                append(
+                                    if (state.superFrameDllImported) {
+                                        stringResource(R.string.session_drawer_superframe_dll_ready_short)
+                                    } else {
+                                        stringResource(R.string.session_drawer_superframe_dll_missing_short)
+                                    }
+                                )
+                                append(" · ")
+                                append(
+                                    if (state.superFrameShaderReady) {
+                                        stringResource(R.string.session_drawer_superframe_shader_ready_short)
+                                    } else {
+                                        stringResource(R.string.session_drawer_superframe_shader_pending_short)
+                                    }
+                                )
+                            },
+                        color = DrawerTextSecondary,
+                        fontSize = (12f * paneScale).sp,
+                    )
+                    if (state.superFrameStatus.isNotBlank()) {
+                        Text(
+                            text = state.superFrameStatus,
+                            color = DrawerTextSecondary,
+                            fontSize = (11f * paneScale).sp,
+                        )
+                    }
+                    DrawerSliderRow(
+                        label = stringResource(R.string.session_drawer_superframe_multiplier),
+                        valueText = "${state.superFrameMultiplier}x",
+                        value = state.superFrameMultiplier.toFloat(),
+                        valueRange = 2f..4f,
+                        steps = 1,
+                        onValueChange = {
+                            listener.onSuperFrameMultiplierChanged(it.roundToInt())
+                        },
+                    )
+                    DrawerSliderRow(
+                        label = stringResource(R.string.session_drawer_superframe_flow_scale),
+                        valueText = String.format("%.2f", state.superFrameFlowScale),
+                        value = state.superFrameFlowScale,
+                        valueRange = 0.25f..1.0f,
+                        steps = 14,
+                        onValueChange = {
+                            listener.onSuperFrameFlowScaleChanged(it.snapToStep(0.05f, 0.25f, 1.0f))
+                        },
+                    )
+                    DrawerBooleanRow(
+                        title = stringResource(R.string.session_drawer_superframe_performance_mode),
+                        checked = state.superFramePerformanceMode,
+                        onCheckedChange = listener::onSuperFramePerformanceModeChanged,
+                    )
+                    DrawerBooleanRow(
+                        title = stringResource(R.string.session_drawer_superframe_anti_artifacts),
+                        checked = state.superFrameAntiArtifacts,
+                        onCheckedChange = listener::onSuperFrameAntiArtifactsChanged,
+                    )
+                    DrawerBooleanRow(
+                        title = stringResource(R.string.session_drawer_superframe_framegen_fp16),
+                        checked = state.superFrameFramegenFp16,
+                        onCheckedChange = listener::onSuperFrameFramegenFp16Changed,
+                    )
+                    DrawerSliderRow(
+                        label = stringResource(R.string.session_drawer_superframe_target_fps_cap),
+                        valueText =
+                            if (state.superFrameTargetFpsCap <= 0) {
+                                stringResource(R.string.session_drawer_superframe_target_fps_cap_auto)
+                            } else {
+                                "${state.superFrameTargetFpsCap}"
+                            },
+                        value = targetFpsCapToSliderValue(state.superFrameTargetFpsCap),
+                        valueRange = 0f..22f,
+                        steps = 21,
+                        onValueChange = {
+                            listener.onSuperFrameTargetFpsCapChanged(sliderValueToTargetFpsCap(it))
+                        },
+                    )
+                    DrawerSliderRow(
+                        label = stringResource(R.string.session_drawer_superframe_ema_alpha),
+                        valueText = String.format("%.3f", state.superFrameEmaAlpha),
+                        value = state.superFrameEmaAlpha,
+                        valueRange = 0.05f..0.5f,
+                        steps = 8,
+                        onValueChange = {
+                            listener.onSuperFrameEmaAlphaChanged(it.snapToStep(0.05f, 0.05f, 0.5f))
+                        },
+                    )
+                    DrawerSliderRow(
+                        label = stringResource(R.string.session_drawer_superframe_outlier_ratio),
+                        valueText = String.format("%.1f", state.superFrameOutlierRatio),
+                        value = state.superFrameOutlierRatio,
+                        valueRange = 2.0f..8.0f,
+                        steps = 11,
+                        onValueChange = {
+                            listener.onSuperFrameOutlierRatioChanged(it.snapToStep(0.5f, 2.0f, 8.0f))
+                        },
+                    )
+                    DrawerSliderRow(
+                        label = stringResource(R.string.session_drawer_superframe_vsync_slack_ms),
+                        valueText = String.format("%.2f ms", state.superFrameVsyncSlackMs),
+                        value = state.superFrameVsyncSlackMs,
+                        valueRange = 1.0f..5.0f,
+                        steps = 15,
+                        onValueChange = {
+                            listener.onSuperFrameVsyncSlackMsChanged(it.snapToStep(0.25f, 1.0f, 5.0f))
+                        },
+                    )
+                    DrawerSliderRow(
+                        label = stringResource(R.string.session_drawer_superframe_queue_depth),
+                        valueText = state.superFrameQueueDepth.toString(),
+                        value = state.superFrameQueueDepth.toFloat(),
+                        valueRange = 2f..6f,
+                        steps = 3,
+                        onValueChange = {
+                            listener.onSuperFrameQueueDepthChanged(it.roundToInt())
+                        },
+                    )
+                }
+            }
+
             DrawerBooleanRow(
                 title = stringResource(R.string.session_drawer_super_resolution),
                 checked = state.fsrEnabled,

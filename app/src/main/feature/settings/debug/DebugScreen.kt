@@ -96,6 +96,11 @@ data class DebugState(
     val steamLogs: Boolean = false,
     val inputLogs: Boolean = false,
     val downloadLogs: Boolean = false,
+    val superFrameEnabled: Boolean = false,
+    val losslessDllImported: Boolean = false,
+    val losslessDllName: String = "",
+    val losslessShaderReady: Boolean = false,
+    val losslessStatus: String = "",
 )
 
 // Root
@@ -113,6 +118,9 @@ fun DebugScreen(
     onSteamLogsChanged: (Boolean) -> Unit,
     onInputLogsChanged: (Boolean) -> Unit,
     onDownloadLogsChanged: (Boolean) -> Unit,
+    onSuperFrameEnabledChanged: (Boolean) -> Unit,
+    onImportLosslessDll: () -> Unit,
+    onRemoveLosslessDll: () -> Unit,
     onShareLogs: () -> Unit,
 ) {
     var showChannelsDialog by remember { mutableStateOf(false) }
@@ -241,6 +249,34 @@ fun DebugScreen(
             )
         }
 
+        item(key = "superframe_section") {
+            SectionLabel(
+                stringResource(R.string.settings_debug_superframe_section),
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        item(key = "superframe_toggle_card") {
+            SettingsToggleCard(
+                title = stringResource(R.string.settings_debug_superframe_toggle_title),
+                subtitle = stringResource(R.string.settings_debug_superframe_toggle_subtitle),
+                icon = Icons.Outlined.Tune,
+                checked = state.superFrameEnabled,
+                onCheckedChange = onSuperFrameEnabledChanged,
+            )
+        }
+
+        item(key = "superframe_recovery_card") {
+            SuperFrameRecoveryCard(
+                dllImported = state.losslessDllImported,
+                dllName = state.losslessDllName,
+                shaderReady = state.losslessShaderReady,
+                statusText = state.losslessStatus,
+                onImport = onImportLosslessDll,
+                onRemove = onRemoveLosslessDll,
+            )
+        }
+
         item(key = "tools_section") {
             SectionLabel(stringResource(R.string.settings_debug_section_tools), modifier = Modifier.padding(top = 8.dp))
         }
@@ -251,6 +287,70 @@ fun DebugScreen(
 
         item(key = "bottom_spacer") {
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun SuperFrameRecoveryCard(
+    dllImported: Boolean,
+    dllName: String,
+    shaderReady: Boolean,
+    statusText: String,
+    onImport: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(CardDark)
+                .border(1.dp, CardBorder, RoundedCornerShape(12.dp)),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text =
+                    if (dllImported) {
+                        stringResource(
+                            R.string.settings_debug_superframe_dll_ready,
+                            if (dllName.isBlank()) "Lossless.dll" else dllName,
+                        )
+                    } else {
+                        stringResource(R.string.settings_debug_superframe_dll_missing)
+                    },
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text =
+                    if (shaderReady) {
+                        stringResource(R.string.settings_debug_superframe_shader_ready, statusText)
+                    } else {
+                        statusText
+                    },
+                color = TextSecondary,
+                fontSize = 11.sp,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SmallActionButton(
+                    label = stringResource(R.string.common_ui_import),
+                    textColor = Accent,
+                    onClick = onImport,
+                )
+                SmallActionButton(
+                    label = stringResource(R.string.common_ui_remove),
+                    textColor = Warning,
+                    onClick = onRemove,
+                )
+            }
         }
     }
 }

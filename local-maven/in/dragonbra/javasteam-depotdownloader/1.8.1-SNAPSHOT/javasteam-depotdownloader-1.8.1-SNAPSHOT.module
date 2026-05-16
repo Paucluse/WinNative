@@ -1,0 +1,156 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "in.dragonbra",
+    "module": "javasteam-depotdownloader",
+    "version": "1.8.1-SNAPSHOT",
+    "attributes": {
+      "org.gradle.status": "integration"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.14"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 11,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "javasteam-depotdownloader-1.8.1-SNAPSHOT.jar",
+          "url": "javasteam-depotdownloader-1.8.1-SNAPSHOT.jar",
+          "size": 223485,
+          "sha512": "2cac54353909d937dd7fed4ea19bc48591c8f1ef68bfe62fd8bf2882cfdd63a085f37dc71c547adfd8798db303fb24137dfc7e43b84c13d79c9212ad8210e979",
+          "sha256": "d39acd6803d32537c0134716434031d525d81758a817047b0cdd2847e4668c96",
+          "sha1": "8ccb43a313aa34e9ea273f2f51b00a6b130ea44b",
+          "md5": "a9e04dab751d1e975107abafd8817ea6"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.jvm.version": 11,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "in.dragonbra",
+          "module": "javasteam",
+          "version": {
+            "requires": "1.8.1-SNAPSHOT"
+          }
+        },
+        {
+          "group": "io.ktor",
+          "module": "ktor-client-core",
+          "version": {
+            "requires": "3.3.3"
+          }
+        },
+        {
+          "group": "io.ktor",
+          "module": "ktor-client-cio",
+          "version": {
+            "requires": "3.3.3"
+          }
+        },
+        {
+          "group": "io.ktor",
+          "module": "ktor-client-websockets",
+          "version": {
+            "requires": "3.3.3"
+          }
+        },
+        {
+          "group": "org.apache.commons",
+          "module": "commons-lang3",
+          "version": {
+            "requires": "3.20.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.10.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-serialization-json",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib-jdk8",
+          "version": {
+            "requires": "2.2.21"
+          }
+        },
+        {
+          "group": "com.squareup.okio",
+          "module": "okio",
+          "version": {
+            "requires": "3.16.0"
+          }
+        },
+        {
+          "group": "com.google.protobuf",
+          "module": "protobuf-java",
+          "version": {
+            "requires": "4.31.1"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "javasteam-depotdownloader-1.8.1-SNAPSHOT.jar",
+          "url": "javasteam-depotdownloader-1.8.1-SNAPSHOT.jar",
+          "size": 223485,
+          "sha512": "2cac54353909d937dd7fed4ea19bc48591c8f1ef68bfe62fd8bf2882cfdd63a085f37dc71c547adfd8798db303fb24137dfc7e43b84c13d79c9212ad8210e979",
+          "sha256": "d39acd6803d32537c0134716434031d525d81758a817047b0cdd2847e4668c96",
+          "sha1": "8ccb43a313aa34e9ea273f2f51b00a6b130ea44b",
+          "md5": "a9e04dab751d1e975107abafd8817ea6"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "javasteam-depotdownloader-1.8.1-SNAPSHOT-sources.jar",
+          "url": "javasteam-depotdownloader-1.8.1-SNAPSHOT-sources.jar",
+          "size": 33145,
+          "sha512": "d344c3e8d7169813810467af4b084a527edae30dfe099cb1752e69b1bb0c2065f1d9185153cec58c991ccfa5b357ec0554867a73bcd20223ff900ac81ff25ac4",
+          "sha256": "113d462a6dbc777b32875c5084023f100fbbcbb2ae6ef6a22ee1e6162c137fd6",
+          "sha1": "6754b242f1d7764521de2a96054b6170a5593a57",
+          "md5": "850ce637788b2846c75e766551531069"
+        }
+      ]
+    }
+  ]
+}

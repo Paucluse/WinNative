@@ -138,13 +138,13 @@ public class WinHandler {
       String key = "vibration_slot_" + i;
       String legacyKey = "vibrate_slot_" + i;
       if (this.preferences.contains(key)) {
-        this.vibrationEnabledSlots[i] = this.preferences.getBoolean(key, false);
+        this.vibrationEnabledSlots[i] = this.preferences.getBoolean(key, true);
       } else {
-        this.vibrationEnabledSlots[i] = this.preferences.getBoolean(legacyKey, false);
+        this.vibrationEnabledSlots[i] = this.preferences.getBoolean(legacyKey, true);
       }
     }
     this.globalVibrationEnabled =
-        this.preferences.getBoolean(ControllerManager.PREF_VIBRATION_GLOBAL, false);
+        this.preferences.getBoolean(ControllerManager.PREF_VIBRATION_GLOBAL, true);
     this.usbControllerManager.start();
   }
 

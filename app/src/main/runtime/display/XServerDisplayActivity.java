@@ -14,6 +14,7 @@ import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.PixelFormat;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -31,6 +32,8 @@ import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.PointerIcon;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -139,6 +142,11 @@ import com.winlator.cmod.runtime.display.winhandler.WinHandler;
 import com.winlator.cmod.runtime.display.connector.UnixSocketConfig;
 import com.winlator.cmod.runtime.display.environment.ImageFs;
 import com.winlator.cmod.runtime.display.environment.XEnvironment;
+import com.winlator.cmod.runtime.display.framegen.FrameGenerationBridge;
+import com.winlator.cmod.runtime.display.framegen.FrameGenerationConfig;
+import com.winlator.cmod.runtime.display.framegen.LsfgVkManager;
+import com.winlator.cmod.runtime.display.framegen.LosslessDllManager;
+import com.winlator.cmod.runtime.display.framegen.LosslessShaderExtractor;
 import com.winlator.cmod.feature.stores.steam.SteamClientManager;
 import com.winlator.cmod.runtime.display.environment.components.ALSAServerComponent;
 import com.winlator.cmod.runtime.display.environment.components.GuestProgramLauncherComponent;
@@ -254,10 +262,13 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
     private XServer xServer;
     private InputControlsManager inputControlsManager;
     private ImageFs imageFs;
+    private SurfaceView frameGenerationSurfaceView;
     private FrameRating frameRating = null;
     private boolean effectiveShowFPS = false;
     private boolean isTapToClickEnabled = true;
     private int runtimeFpsLimit = 0;
+    private boolean losslessRenderLoopInitialized = false;
+    private boolean frameGenerationOverlaySurfaceReady = false;
     private String lastRendererName = "OpenGL";
     private String lastGpuName = null;
     private Runnable editInputControlsCallback;
@@ -335,6 +346,8 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
     private int fsrMode = 0;
     private int fsrSharpness = 100;
     private int colorProfile = 0;
+    private Runnable frameGenerationDiagnosticsRunnable;
+    private String frameGenerationDiagnosticsSummary = "";
     private boolean gyroscopeCardExpanded = false;
     private XServerDrawerStateHolder drawerStateHolder;
     private XServerDrawerActionListener drawerActionListener;
@@ -598,6 +611,7 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
 
         // Initialize preferences early so pickHighestRefreshRate can read global override
         preferences = PreferenceManager.getDefaultSharedPreferences(this);
+        disableSuperFrameAfterUnsafeExit();
         applyPreferredRefreshRate();
         launchedFromPinnedShortcut = isPinnedShortcutLaunchIntent(getIntent());
         
@@ -1759,6 +1773,7 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
         if (!cleaningUp && environment != null) {
             xServerView.onResume();
             environment.onResume();
+            applyFrameGenerationSettings();
         }
         if (inputControlsView != null && touchpadView != null) {
             ControlsProfile activeProfile = inputControlsView.getProfile();
@@ -2822,8 +2837,12 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
     @Override
     protected void onDestroy() {
         activityDestroyed.set(true);
+        clearSuperFrameSessionActive();
         if (preloaderDialog != null) {
             preloaderDialog.close();
+        }
+        if (handler != null && frameGenerationDiagnosticsRunnable != null) {
+            handler.removeCallbacks(frameGenerationDiagnosticsRunnable);
         }
         if (multicastLock != null && multicastLock.isHeld()) {
             try {
@@ -2973,6 +2992,8 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
             inputProfileNames.add(profile.getName());
         }
 
+        FrameGenerationConfig frameGenerationConfig = FrameGenerationConfig.fromPreferences(preferences);
+
         XServerDrawerState state = XServerDrawerMenuKt.buildXServerDrawerState(
                 this,
                 isRelativeMouseMovement,
@@ -3005,6 +3026,22 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
                 gyroscopeCardExpanded,
                 xServerView != null ? xServerView.getRenderer().getFpsLimit() : 0,
                 screenEffectsCardExpanded,
+                frameGenerationConfig.enabled,
+                frameGenerationConfig.multiplier,
+                frameGenerationConfig.flowScale,
+                frameGenerationConfig.performanceMode,
+                frameGenerationConfig.antiArtifacts,
+                frameGenerationConfig.framegenFp16,
+                frameGenerationConfig.targetFpsCap,
+                frameGenerationConfig.emaAlpha,
+                frameGenerationConfig.outlierRatio,
+                frameGenerationConfig.vsyncSlackMs,
+                frameGenerationConfig.queueDepth,
+                LosslessDllManager.hasImportedDll(this),
+                LosslessDllManager.hasImportedDll(this),
+                frameGenerationDiagnosticsSummary.isEmpty()
+                        ? LsfgVkManager.getStatus(this, container, frameGenerationConfig)
+                        : frameGenerationDiagnosticsSummary,
                 fsrEnabled,
                 fsrMode,
                 fsrSharpness,
@@ -3161,6 +3198,117 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
                     @Override
                     public void onScreenEffectsCardExpandedChanged(boolean expanded) {
                         screenEffectsCardExpanded = expanded;
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFrameEnabledChanged(boolean enabled) {
+                        preferences.edit().putBoolean(FrameGenerationConfig.PREF_ENABLED, enabled).apply();
+                        applyFrameGenerationSettings();
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFrameMultiplierChanged(int multiplier) {
+                        preferences.edit()
+                                .putInt(
+                                        FrameGenerationConfig.PREF_MULTIPLIER,
+                                        FrameGenerationConfig.clampMultiplier(multiplier))
+                                .apply();
+                        applyFrameGenerationSettings();
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFrameFlowScaleChanged(float flowScale) {
+                        preferences.edit()
+                                .putFloat(
+                                        FrameGenerationConfig.PREF_FLOW_SCALE,
+                                        FrameGenerationConfig.clampFlowScale(flowScale))
+                                .apply();
+                        applyFrameGenerationSettings();
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFramePerformanceModeChanged(boolean enabled) {
+                        preferences.edit()
+                                .putBoolean(FrameGenerationConfig.PREF_PERFORMANCE_MODE, enabled)
+                                .apply();
+                        applyFrameGenerationSettings();
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFrameAntiArtifactsChanged(boolean enabled) {
+                        preferences.edit()
+                                .putBoolean(FrameGenerationConfig.PREF_ANTI_ARTIFACTS, enabled)
+                                .apply();
+                        applyFrameGenerationSettings();
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFrameFramegenFp16Changed(boolean enabled) {
+                        preferences.edit()
+                                .putBoolean(FrameGenerationConfig.PREF_FRAMEGEN_FP16, enabled)
+                                .apply();
+                        applyFrameGenerationSettings();
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFrameTargetFpsCapChanged(int targetFpsCap) {
+                        preferences.edit()
+                                .putInt(
+                                        FrameGenerationConfig.PREF_TARGET_FPS_CAP,
+                                        FrameGenerationConfig.clampTargetFpsCap(targetFpsCap))
+                                .apply();
+                        applyFrameGenerationSettings();
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFrameEmaAlphaChanged(float emaAlpha) {
+                        preferences.edit()
+                                .putFloat(
+                                        FrameGenerationConfig.PREF_EMA_ALPHA,
+                                        FrameGenerationConfig.clampEmaAlpha(emaAlpha))
+                                .apply();
+                        applyFrameGenerationSettings();
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFrameOutlierRatioChanged(float outlierRatio) {
+                        preferences.edit()
+                                .putFloat(
+                                        FrameGenerationConfig.PREF_OUTLIER_RATIO,
+                                        FrameGenerationConfig.clampOutlierRatio(outlierRatio))
+                                .apply();
+                        applyFrameGenerationSettings();
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFrameVsyncSlackMsChanged(float vsyncSlackMs) {
+                        preferences.edit()
+                                .putFloat(
+                                        FrameGenerationConfig.PREF_VSYNC_SLACK_MS,
+                                        FrameGenerationConfig.clampVsyncSlackMs(vsyncSlackMs))
+                                .apply();
+                        applyFrameGenerationSettings();
+                        renderDrawerMenu();
+                    }
+
+                    @Override
+                    public void onSuperFrameQueueDepthChanged(int queueDepth) {
+                        preferences.edit()
+                                .putInt(
+                                        FrameGenerationConfig.PREF_QUEUE_DEPTH,
+                                        FrameGenerationConfig.clampQueueDepth(queueDepth))
+                                .apply();
+                        applyFrameGenerationSettings();
                         renderDrawerMenu();
                     }
 
@@ -3527,6 +3675,114 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
                 composer.addEffect(new CRTEffect());
                 break;
         }
+    }
+
+    private void applyFrameGenerationSettings() {
+        if (preferences == null) return;
+
+        FrameGenerationConfig config = FrameGenerationConfig.fromPreferences(preferences);
+        boolean dllImported = LosslessDllManager.hasImportedDll(this);
+        preferences.edit()
+                .putBoolean(LosslessShaderExtractor.PREF_SHADERS_READY, dllImported)
+                .putString(
+                        LosslessShaderExtractor.PREF_LAST_STATUS,
+                        LsfgVkManager.getStatus(this, container, config))
+                .apply();
+        if (config.enabled && dllImported) {
+            markSuperFrameSessionActive();
+        } else {
+            clearSuperFrameSessionActive();
+        }
+        refreshLosslessRenderLoopState(config);
+        updateFrameGenerationDiagnosticsLoop();
+    }
+
+    private void refreshLosslessRenderLoopState(FrameGenerationConfig config) {
+        if (preferences == null || container == null) return;
+        LsfgVkManager.updateRuntimeConfig(this, container, config);
+        frameGenerationDiagnosticsSummary = LsfgVkManager.getStatus(this, container, config);
+    }
+
+    private void disableSuperFrameAfterUnsafeExit() {
+        if (preferences == null) return;
+        if (!preferences.getBoolean(FrameGenerationConfig.PREF_SESSION_DIRTY, false)) return;
+        if (!preferences.getBoolean(FrameGenerationConfig.PREF_ENABLED, false)) {
+            preferences.edit().putBoolean(FrameGenerationConfig.PREF_SESSION_DIRTY, false).apply();
+            return;
+        }
+        preferences.edit()
+                .putBoolean(FrameGenerationConfig.PREF_ENABLED, false)
+                .putBoolean(FrameGenerationConfig.PREF_SESSION_DIRTY, false)
+                .putString(
+                        LosslessShaderExtractor.PREF_LAST_STATUS,
+                        "Super Frame was disabled after the previous session did not close cleanly.")
+                .apply();
+        losslessRenderLoopInitialized = false;
+        frameGenerationOverlaySurfaceReady = false;
+    }
+
+    private void markSuperFrameSessionActive() {
+        if (preferences == null) return;
+        preferences.edit().putBoolean(FrameGenerationConfig.PREF_SESSION_DIRTY, true).apply();
+    }
+
+    private void clearSuperFrameSessionActive() {
+        if (preferences == null) return;
+        preferences.edit().putBoolean(FrameGenerationConfig.PREF_SESSION_DIRTY, false).apply();
+    }
+
+    private int getEffectiveFrameGenerationTargetFpsCap(FrameGenerationConfig config) {
+        int effectiveTargetFpsCap = FrameGenerationConfig.clampTargetFpsCap(config.targetFpsCap);
+        if (effectiveTargetFpsCap <= 0 && runtimeFpsLimit > 0 && config.multiplier > 1) {
+            effectiveTargetFpsCap =
+                    FrameGenerationConfig.clampTargetFpsCap(runtimeFpsLimit * config.multiplier);
+        }
+        return effectiveTargetFpsCap;
+    }
+
+    private long resolveLosslessVsyncPeriodNs() {
+        int effectiveRequestedHz =
+                RefreshRateUtils.resolveFramePacedRefreshRate(
+                        this, getRefreshRateOverride(), runtimeFpsLimit);
+        float preferredRefreshRate =
+                RefreshRateUtils.resolvePreferredRefreshRate(this, effectiveRequestedHz);
+        if (preferredRefreshRate <= 0f
+                && getWindow() != null
+                && getWindow().getDecorView() != null
+                && getWindow().getDecorView().getDisplay() != null) {
+            preferredRefreshRate = getWindow().getDecorView().getDisplay().getRefreshRate();
+        }
+        if (preferredRefreshRate <= 0f) {
+            preferredRefreshRate = 60f;
+        }
+        return Math.round(1_000_000_000d / preferredRefreshRate);
+    }
+
+    private void updateLosslessPacingHints(FrameGenerationConfig config) {
+        frameGenerationDiagnosticsSummary = LsfgVkManager.getStatus(this, container, config);
+    }
+
+    private void updateFrameGenerationDiagnosticsLoop() {
+        if (handler == null) {
+            if (preferences == null) {
+                frameGenerationDiagnosticsSummary = "";
+            } else {
+                frameGenerationDiagnosticsSummary =
+                        LsfgVkManager.getStatus(
+                                this, container, FrameGenerationConfig.fromPreferences(preferences));
+            }
+            return;
+        }
+        if (frameGenerationDiagnosticsRunnable != null) {
+            handler.removeCallbacks(frameGenerationDiagnosticsRunnable);
+        }
+        if (preferences == null) {
+            frameGenerationDiagnosticsSummary = "";
+            return;
+        }
+        frameGenerationDiagnosticsSummary =
+                LsfgVkManager.getStatus(
+                        this, container, FrameGenerationConfig.fromPreferences(preferences));
     }
 
     private void loadScreenEffectsSettings() {
@@ -4413,10 +4669,17 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
         scriptFile.setExecutable(true);
     }
 
+    private void setupFrameGenerationOverlay(FrameLayout rootView) {
+        frameGenerationSurfaceView = null;
+        frameGenerationOverlaySurfaceReady = false;
+    }
+
     private void setupUI() {
         FrameLayout rootView = xServerDisplayFrame;
         xServerView = new XServerView(this, xServer);
         final GLRenderer renderer = xServerView.getRenderer();
+        renderer.setOnSurfaceSizeChangedListener(
+                (width, height) -> runOnUiThread(this::applyFrameGenerationSettings));
         renderer.setCursorVisible(false);
         renderer.setNativeMode(isNativeRenderingEnabled);
         
@@ -4438,6 +4701,7 @@ public class XServerDisplayActivity extends FixedFontScaleAppCompatActivity {
         applyScreenEffects();
         xServer.setRenderer(renderer);
         rootView.addView(xServerView);
+        applyFrameGenerationSettings();
 
         globalCursorSpeed = preferences.getFloat("cursor_speed", 1.0f);
         touchpadView = new TouchpadView(this, xServer, timeoutHandler, hideControlsRunnable);

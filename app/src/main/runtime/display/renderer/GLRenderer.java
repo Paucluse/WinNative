@@ -7,6 +7,7 @@ import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.util.Log;
 import com.winlator.cmod.R;
+import com.winlator.cmod.runtime.display.framegen.FrameGenerationCaptureController;
 import com.winlator.cmod.runtime.display.renderer.material.CursorMaterial;
 import com.winlator.cmod.runtime.display.renderer.material.ShaderMaterial;
 import com.winlator.cmod.runtime.display.renderer.material.WindowMaterial;
@@ -32,6 +33,10 @@ public class GLRenderer
     implements GLSurfaceView.Renderer,
         WindowManager.OnWindowModificationListener,
         Pointer.OnPointerMotionListener {
+  public interface OnSurfaceSizeChangedListener {
+    void onSurfaceSizeChanged(int width, int height);
+  }
+
   public final XServerView xServerView;
   private final XServer xServer;
   public final VertexAttribute quadVertices = new VertexAttribute("position", 2);
@@ -64,6 +69,9 @@ public class GLRenderer
   private boolean wasDirectMode = false;
   private final android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
   private final java.util.concurrent.atomic.AtomicBoolean renderRequested = new java.util.concurrent.atomic.AtomicBoolean(false);
+  private final FrameGenerationCaptureController frameGenerationCaptureController =
+      new FrameGenerationCaptureController();
+  private OnSurfaceSizeChangedListener onSurfaceSizeChangedListener;
 
   private final EffectComposer effectComposer;
 
@@ -120,6 +128,10 @@ public class GLRenderer
   public void onSurfaceChanged(GL10 gl, int width, int height) {
     surfaceWidth = width;
     surfaceHeight = height;
+    frameGenerationCaptureController.onSurfaceChanged(width, height);
+    if (onSurfaceSizeChangedListener != null) {
+      onSurfaceSizeChangedListener.onSurfaceSizeChanged(width, height);
+    }
     viewTransformation.update(width, height, xServer.screenInfo.width, xServer.screenInfo.height);
     viewportNeedsUpdate = true;
   }
@@ -133,10 +145,20 @@ public class GLRenderer
     } else {
       drawFrame();
     }
+    frameGenerationCaptureController.capturePresentedFrame(0, surfaceWidth, surfaceHeight);
   }
 
   public EffectComposer getEffectComposer() {
     return effectComposer;
+  }
+
+  public FrameGenerationCaptureController getFrameGenerationCaptureController() {
+    return frameGenerationCaptureController;
+  }
+
+  public void setOnSurfaceSizeChangedListener(
+      OnSurfaceSizeChangedListener onSurfaceSizeChangedListener) {
+    this.onSurfaceSizeChangedListener = onSurfaceSizeChangedListener;
   }
 
   public void drawFrame() {
@@ -675,5 +697,9 @@ public class GLRenderer
 
   @Override
   public void onFramePresented(com.winlator.cmod.runtime.display.xserver.Window window) {
+  }
+
+  public void destroyFrameGenerationResources() {
+    frameGenerationCaptureController.destroy();
   }
 }

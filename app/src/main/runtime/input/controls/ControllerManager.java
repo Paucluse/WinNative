@@ -71,7 +71,7 @@ public class ControllerManager {
       enabledSlots[i] = preferences.getBoolean(PREF_ENABLED_SLOTS_PREFIX + i, i == 0);
       vibrationEnabled[i] = preferences.getBoolean(PREF_VIBRATE_SLOT_PREFIX + i, false);
     }
-    globalVibrationEnabled = preferences.getBoolean(PREF_VIBRATION_GLOBAL, false);
+    globalVibrationEnabled = preferences.getBoolean(PREF_VIBRATION_GLOBAL, true);
   }
 
   public void saveAssignments() {
